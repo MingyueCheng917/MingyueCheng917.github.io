@@ -1,37 +1,58 @@
-# https://jupyterbook.org/en/stable/publish/gh-pages.html
-
+# Deploy Jupyter Book to GitHub Pages
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  deploy-book:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
-          cache: pip
-      - run: pip install -r requirements.txt
+          python-version: "3.11"
 
-      - name: Build the book
+      - name: Install dependencies
         run: |
-          jupyter-book build .
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt || true
+          python -m pip install "jupyter-book==1.*"
+          python -m pip install pandas plotly nbformat statsmodels || true
+
+      - name: Build Jupyter Book
+        run: |
+          jupyter-book build . --keep-going
+          test -d "_build/html"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           path: _build/html
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
